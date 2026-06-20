@@ -2,9 +2,10 @@
 	InventoryUI.client.lua
 	Client script — belongs in src/client (syncs to StarterPlayer.StarterPlayerScripts)
 
-	Shows a simple scrolling list of everything the player has spun so
-	far, grouped by item with a count (e.g. "Guitar x3"). Updates
-	automatically whenever the server reports a change.
+	Shows a scrolling list of everything the player has spun, grouped
+	with counts (e.g. "Guitar x3"). Clicking a row "arms" that item for
+	placement — the next plot slot you click in the 3D world will place
+	one of it, via PlacementHandler on the server.
 ]]
 
 local Players = game:GetService("Players")
@@ -19,9 +20,8 @@ local ItemDatabase = require(sharedFolder.modules.ItemDatabase)
 local remotesFolder = ReplicatedStorage:WaitForChild("Remotes")
 local inventoryUpdated = remotesFolder:WaitForChild("InventoryUpdated")
 local requestInventory = remotesFolder:WaitForChild("RequestInventory")
+local selectItemForPlacement = remotesFolder:WaitForChild("SelectItemForPlacement")
 
--- Reuse the same ScreenGui SpinUI created, if it's already there, so
--- everything lives under one GUI container instead of several.
 local screenGui = playerGui:FindFirstChild("SpinUI")
 if not screenGui then
 	screenGui = Instance.new("ScreenGui")
@@ -41,9 +41,9 @@ inventoryFrame.Parent = screenGui
 local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1, 0, 0, 30)
 title.BackgroundTransparency = 1
-title.Text = "Inventory"
+title.Text = "Inventory (click to place)"
 title.Font = Enum.Font.GothamBold
-title.TextSize = 20
+title.TextSize = 16
 title.TextColor3 = Color3.fromRGB(255, 255, 255)
 title.Parent = inventoryFrame
 
@@ -62,9 +62,17 @@ listLayout.Padding = UDim.new(0, 2)
 listLayout.SortOrder = Enum.SortOrder.LayoutOrder
 listLayout.Parent = scrollFrame
 
+local function clearSelectionHighlight()
+	for _, row in scrollFrame:GetChildren() do
+		if row:IsA("TextButton") then
+			row.BackgroundTransparency = 1
+		end
+	end
+end
+
 local function refreshInventory(itemIds)
 	for _, child in scrollFrame:GetChildren() do
-		if child:IsA("TextLabel") then
+		if child:IsA("TextButton") then
 			child:Destroy()
 		end
 	end
@@ -83,10 +91,12 @@ local function refreshInventory(itemIds)
 	for i, itemId in order do
 		local itemData = ItemDatabase.GetItemById(itemId)
 		if itemData then
-			local row = Instance.new("TextLabel")
+			local row = Instance.new("TextButton")
 			row.Size = UDim2.new(1, -10, 0, 24)
 			row.Position = UDim2.fromOffset(5, 0)
 			row.BackgroundTransparency = 1
+			row.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
+			row.AutoButtonColor = false
 			row.TextXAlignment = Enum.TextXAlignment.Left
 			row.Font = Enum.Font.Gotham
 			row.TextSize = 16
@@ -94,6 +104,12 @@ local function refreshInventory(itemIds)
 			row.TextColor3 = ItemDatabase.Rarities[itemData.Rarity].Color
 			row.Text = string.format("%s x%d", itemData.Name, counts[itemId])
 			row.Parent = scrollFrame
+
+			row.MouseButton1Click:Connect(function()
+				selectItemForPlacement:FireServer(itemId)
+				clearSelectionHighlight()
+				row.BackgroundTransparency = 0.7
+			end)
 		end
 	end
 end
